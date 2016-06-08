@@ -1,0 +1,2 @@
+image count:21
+image dir:G:\Study\Gradute Course\Image Understanding\Project\EigenFace\faceImages\class_images\nonsmiling_cropped
