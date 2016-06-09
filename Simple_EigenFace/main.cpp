@@ -1,39 +1,47 @@
 #include "opencv2\core\core.hpp"
 #include <opencv2/highgui/highgui.hpp>
 #include "opencv2\imgproc\imgproc.hpp"
+#include "ImgProcess.h"
 #include "Config.h"
+#include "face.h"
 #include <map>
 #include <iostream>
 #include <string>
 using namespace std;
 using namespace cv;
 
-bool concatenate_image_row(vector<Mat> & image_vector, Mat& train_imags, Size& im_size);
-Mat norm_0_255(const Mat& src);
-Size calc_new_size(vector<Mat>::iterator & it_ref, int rows_max, int cols_max);
+
 
 int main(int argc, char ** argv) {
-	vector<Mat> train_im_vec;
+	vector<Mat> train_im_vec, test_im_vec;
 	map<string, universal_type> config_map;
-	Size im_size;
+	Size std_im_size;
 	read_config_file(argv[1], config_map);
 	int image_count = 0;
+	int test_image_count = 0;
 	image_count << config_map["image count"];
-	string image_dir;
-	image_dir << config_map["image dir"];
-	//cout << image_dir << '\n' << image_count << endl;
+	test_image_count << config_map["test image count"];
+	string train_image_dir;
+	train_image_dir << config_map["train image dir"];
+	string test_image_dir;
+	test_image_dir << config_map["test image dir"];
 	train_im_vec.reserve(image_count);
-	//read image.
+	//read train image.
 	int i = 0;
 	string im_id;
 	Mat train_imgs;
-	Mat im;
+	Mat train_im_8bit;
+	Mat train_im_64bit;
 	for (i = 1; i <= image_count; i++) {
 		im_id = i<10? '0'+to_string(i): to_string(i);
-		//cout << image_dir + '\\' + im_id +".jpg" << endl;
-		train_im_vec.push_back(imread(image_dir + '\\' + im_id + ".jpg", IMREAD_GRAYSCALE));
+		//cout << train_image_dir + '\\' + im_id +".jpg" << endl;
+		train_im_8bit = imread(train_image_dir + '\\' + im_id + ".jpg", IMREAD_GRAYSCALE);
+		train_im_8bit.convertTo(train_im_64bit, CV_64FC1);
+		train_im_vec.push_back(train_im_64bit);
 	}
-	concatenate_image_row(train_im_vec, train_imgs, im_size);
+	Mat average_face;
+	concatenate_image_row(train_im_vec, train_imgs, std_im_size);
+	minus_average_face(train_imgs, average_face);
 	// pca
 	// Number of components to keep for the PCA:
 	int num_components = 10;
@@ -47,92 +55,42 @@ int main(int argc, char ** argv) {
 	Mat eigenvectors = pca.eigenvectors.clone();
 
 	// The mean face:
-	imwrite("avg.jpg", norm_0_255(mean.reshape(1, im_size.height)));
+	imwrite("average face.jpg", average_face.reshape(1,std_im_size.height));
 
 	// The first three eigenfaces:
-	imwrite("pc1.jpg", norm_0_255(pca.eigenvectors.row(0)).reshape(1, im_size.height));
-	imwrite("pc2.jpg", norm_0_255(pca.eigenvectors.row(1)).reshape(1, im_size.height));
-	imwrite("pc3.jpg", norm_0_255(pca.eigenvectors.row(2)).reshape(1, im_size.height));
+	imwrite("pc1.jpg", norm_0_255(pca.eigenvectors.row(0)).reshape(1, std_im_size.height));
+	imwrite("pc2.jpg", norm_0_255(pca.eigenvectors.row(1)).reshape(1, std_im_size.height));
+	imwrite("pc3.jpg", norm_0_255(pca.eigenvectors.row(2)).reshape(1, std_im_size.height));
 
-	// Show the images:
-	waitKey(0);
+	// build face base.
+	Mat face_base;
+	build_face_base(train_imgs, eigenvectors, face_base);
 
-	//debug
-	im = imread(image_dir + '\\' + to_string(11) + ".jpg", IMREAD_GRAYSCALE);
-	imwrite("original image.jpg", im);
-	Mat rebuild_im = train_imgs.row(11-1).clone();
-	imwrite("rebuild image.jpg", rebuild_im.reshape(0, im_size.height));
-	waitKey(0);
+	// test the image.
+	Mat test_im;
+	int success_count = 0;
+	int prodict_id = 0;
+	Mat test_im_64bit;
+	for (i = 1; i <= test_image_count; ++i){
+		im_id = i<10 ? '0' + to_string(i) : to_string(i);
+		//cout << train_image_dir + '\\' + im_id +".jpg" << endl;
+		test_im = imread(test_image_dir + '\\' + im_id + ".jpg", IMREAD_GRAYSCALE);
+		test_im.convertTo(test_im_64bit, CV_64FC1);
+		prodict_id = recognize_face(test_im_64bit, eigenvectors, std_im_size, face_base, average_face);
+		if (prodict_id == i - 1) {
+			++success_count;
+		}
+		cout << i - 1 << "-th face -->" << prodict_id << endl;
+	}
+	cout << "the success count is: " << success_count << endl;
+	char wait;
+	cout << "input any char to exit" << endl;
+	cin >> wait;
+	////debug
+	//im = imread(train_image_dir + '\\' + to_string(11) + ".jpg", IMREAD_GRAYSCALE);
+	//imwrite("original image.jpg", im);
+	//Mat rebuild_im = train_imgs.row(11-1).clone();
+	//imwrite("rebuild image.jpg", rebuild_im.reshape(0, std_im_size.height));
+	//waitKey(0);
 	return 0;
-}
-/* resize the images to the same size. Press them to an row vector. Concatenate them into a matrix.
-* -------------------------------------------------------------------------------------------------
-* @image_vector: vector containin the original images.
-* @train_imags: concatenated image will be contained here.
-*/
-bool concatenate_image_row(vector<Mat> & image_vector, Mat& train_imags, Size& im_size) {
-	// find the max row size and max column size.
-	int rows_max = 0, column_max = 0;
-	vector<Mat>::const_iterator it_im_vec = image_vector.cbegin();
-	for (; it_im_vec != image_vector.cend(); ++it_im_vec) {
-		if (it_im_vec->rows > rows_max) {
-			rows_max = it_im_vec->rows;
-		}
-		if (it_im_vec->cols > column_max) {
-			column_max = it_im_vec->cols;
-		}
-	}
-	assert(rows_max != 0 && column_max != 0);
-	im_size.width = column_max;
-	im_size.height = rows_max;
-	// resize every image to the max size and concatenate them.
-	vector<Mat>::iterator it = image_vector.begin();
-	Mat im_std_size=Mat::zeros(rows_max,column_max,CV_64FC1);
-	Mat im_resized;
-	Size new_size;
-	for (; it != image_vector.end(); ++it) {
-		//new_size = calc_new_size(it, rows_max, column_max);
-		//resize(*it, im_resized, new_size);
-		//im_resized.copyTo(im_std_size(Rect(0, 0, new_size.width, new_size.height)));
-		im_std_size = Mat::zeros(rows_max, column_max, CV_64FC1);
-		resize(*it, im_resized, Size(column_max, rows_max));
-		im_resized.copyTo(im_std_size(Rect(0, 0, column_max, rows_max)));
-
-		//it->copyTo(im_resized(Rect(0, 0, it->cols, it->rows)));
-		train_imags.push_back(im_std_size.reshape(0, 1));
-	}
-	return true;
-}
-
-Size calc_new_size(vector<Mat>::iterator & it_ref, int rows_max, int cols_max) {
-	Size new_size;
-	if (it_ref->rows * cols_max > it_ref->cols * rows_max) {
-		new_size.height = rows_max;
-		new_size.width = it_ref->cols * rows_max / it_ref->rows;
-		new_size.width = new_size.width > cols_max ? cols_max : new_size.width;
-	} 
-	else {
-		new_size.width = cols_max;
-		new_size.height = it_ref->rows * cols_max / it_ref->cols;
-		new_size.height = new_size.height > rows_max ? rows_max : new_size.height;
-	}
-	return new_size;
-}
-
-// Normalizes a given image into a value range between 0 and 255.
-Mat norm_0_255(const Mat& src) {
-	// Create and return normalized image:
-	Mat dst;
-	switch (src.channels()) {
-	case 1:
-		cv::normalize(src, dst, 0, 255, NORM_MINMAX, CV_8UC1);
-		break;
-	case 3:
-		cv::normalize(src, dst, 0, 255, NORM_MINMAX, CV_8UC3);
-		break;
-	default:
-		src.copyTo(dst);
-		break;
-	}
-	return dst;
 }

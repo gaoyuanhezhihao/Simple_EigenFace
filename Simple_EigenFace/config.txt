@@ -1,2 +1,4 @@
 image count:21
-image dir:G:\Study\Gradute Course\Image Understanding\Project\EigenFace\faceImages\class_images\nonsmiling_cropped
+train image dir:G:\Study\Gradute Course\Image Understanding\Project\EigenFace\faceImages\class_images\nonsmiling_cropped
+test image count:21
+test image dir:G:\Study\Gradute Course\Image Understanding\Project\EigenFace\faceImages\class_images\smiling_cropped
