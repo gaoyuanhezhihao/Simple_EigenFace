@@ -7,6 +7,7 @@
 #include <map>
 #include <iostream>
 #include <string>
+#include <fstream>
 using namespace std;
 using namespace cv;
 
@@ -25,6 +26,8 @@ int main(int argc, char ** argv) {
 	train_image_dir << config_map["train image dir"];
 	string test_image_dir;
 	test_image_dir << config_map["test image dir"];
+	string result_save_filename;
+	result_save_filename << config_map["file to saving the result"];
 	train_im_vec.reserve(image_count);
 	//read train image.
 	int i = 0;
@@ -44,10 +47,10 @@ int main(int argc, char ** argv) {
 	minus_average_face(train_imgs, average_face);
 	// pca
 	// Number of components to keep for the PCA:
-	int num_components = 10;
+	//int num_components = 21;
 
 	// Perform a PCA:
-	PCA pca(train_imgs, Mat(), CV_PCA_DATA_AS_ROW, num_components);
+	PCA pca(train_imgs, Mat(), CV_PCA_DATA_AS_ROW, image_count);
 
 	// And copy the PCA results:
 	Mat mean = pca.mean.clone();
@@ -62,29 +65,15 @@ int main(int argc, char ** argv) {
 	imwrite("pc2.jpg", norm_0_255(pca.eigenvectors.row(1)).reshape(1, std_im_size.height));
 	imwrite("pc3.jpg", norm_0_255(pca.eigenvectors.row(2)).reshape(1, std_im_size.height));
 
-	// build face base.
-	Mat face_base;
-	build_face_base(train_imgs, eigenvectors, face_base);
-
-	// test the image.
-	Mat test_im;
+	std::ofstream model_eval_result;
+	model_eval_result.open(result_save_filename);
+	model_eval_result << "number of eigen face | success rate" << endl;
 	int success_count = 0;
-	int prodict_id = 0;
-	Mat test_im_64bit;
-	for (i = 1; i <= test_image_count; ++i){
-		im_id = i<10 ? '0' + to_string(i) : to_string(i);
-		//cout << train_image_dir + '\\' + im_id +".jpg" << endl;
-		test_im = imread(test_image_dir + '\\' + im_id + ".jpg", IMREAD_GRAYSCALE);
-		test_im.convertTo(test_im_64bit, CV_64FC1);
-		prodict_id = recognize_face(test_im_64bit, eigenvectors, std_im_size, face_base, average_face);
-		if (prodict_id == i - 1) {
-			++success_count;
-		}
-		cout << i - 1 << "-th face -->" << prodict_id << endl;
+	for (i = 1; i <= image_count; ++i) {
+		success_count=evaluate_eigen_face_number(train_imgs, eigenvectors, test_image_dir, test_image_count, std_im_size, average_face, i);
+		model_eval_result << i << '|' << (double)success_count / (double)image_count << endl;
 	}
-	cout << "the success count is: " << success_count << endl;
 	char wait;
-	cout << "input any char to exit" << endl;
 	cin >> wait;
 	////debug
 	//im = imread(train_image_dir + '\\' + to_string(11) + ".jpg", IMREAD_GRAYSCALE);

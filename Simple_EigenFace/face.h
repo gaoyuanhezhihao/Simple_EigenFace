@@ -16,4 +16,7 @@ struct face
 bool build_face_base(const Mat & train_imags, const Mat & eigen_faces, Mat & face_base);
 bool project_to_eigen_face(const Mat & eigen_faces, const Mat & face_img, Mat & feature);
 int recognize_face(Mat & im_tested, const Mat & eigen_faces, Size std_size, Mat & face_base, Mat & average_face);
+int evaluate_eigen_face_number(const Mat & train_imgs, const Mat & eigenvectors, \
+	const string test_image_dir, const int test_image_count, \
+	Size std_im_size, Mat average_face, int num_eigen_face);
 #endif

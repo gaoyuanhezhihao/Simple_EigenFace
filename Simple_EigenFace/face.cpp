@@ -71,3 +71,49 @@ int recognize_face(Mat & im_tested, const Mat & eigen_faces, Size std_size, Mat 
 	cout << "best : " << face_base.row(best_id) << endl;
 	return best_id;
 }
+
+/* evalute the model to different number of eigen faces.
+*-------------------------------------------------------
+* @train_imags: the concatenated faces.
+* @eigenvectors:
+* @test_image_dir: the directory containing the test images.
+* @test_image_count: counts of the test images.
+* @std_im_size: the size of the stand image size. every image should be resize to it.
+* @average_face: average face of the train faces.
+* @num_eigen_face: number of the eigen faces used in this model.
+*---------------------------------------------------------------
+* return: the success count
+*/
+int evaluate_eigen_face_number(const Mat & train_imgs, const Mat & eigenvectors,\
+								const string test_image_dir, const int test_image_count,\
+								Size std_im_size, Mat average_face, int num_eigen_face) {
+	// copy the eigen face from eigen vector.
+	int i = 0;
+	Mat sub_eigen_faces;
+	for (i = 0; i < num_eigen_face; ++i){
+		sub_eigen_faces.push_back(eigenvectors.row(i));
+	}
+	// build face base.
+	Mat face_base;
+	build_face_base(train_imgs, sub_eigen_faces, face_base);
+
+	// test the image.
+	Mat test_im;
+	int success_count = 0;
+	int prodict_id = 0;
+	Mat test_im_64bit;
+	string im_id;
+	for (i = 1; i <= test_image_count; ++i){
+		im_id = i<10 ? '0' + to_string(i) : to_string(i);
+		//cout << train_image_dir + '\\' + im_id +".jpg" << endl;
+		test_im = imread(test_image_dir + '\\' + im_id + ".jpg", IMREAD_GRAYSCALE);
+		test_im.convertTo(test_im_64bit, CV_64FC1);
+		prodict_id = recognize_face(test_im_64bit, sub_eigen_faces, std_im_size, face_base, average_face);
+		if (prodict_id == i - 1) {
+			++success_count;
+		}
+		cout << i - 1 << "-th face -->" << prodict_id << endl;
+	}
+	cout << "the success count is: " << success_count << endl;
+	return success_count;
+}
