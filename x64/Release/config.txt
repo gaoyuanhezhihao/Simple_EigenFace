@@ -1,2 +1,12 @@
 image count:21
-image dir:G:\Study\Gradute Course\Image Understanding\Project\EigenFace\faceImages\class_images\nonsmiling_cropped
+train image dir:G:\Study\Gradute Course\Image Understanding\Project\EigenFace\faceImages\class_images\nonsmiling_cropped
+test image count:21
+test image dir:G:\Study\Gradute Course\Image Understanding\Project\EigenFace\faceImages\class_images\smiling_cropped
+file to saving the result:./result.txt
+image to find face:G:\Study\Gradute Course\Image Understanding\Project\EigenFace\Simple_EigenFace\faceImages\class_images\group\nonsmiling\00009.jpg
+number of eigen faces:10
+min scale:0.45
+max scale:0.5
+scale step:0.1
+number of faces in the image:3
+findFace result path:./findFace.jpg

@@ -38,5 +38,8 @@
     <ClInclude Include="ImgProcess.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="main_func.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

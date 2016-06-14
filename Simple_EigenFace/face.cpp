@@ -2,7 +2,7 @@
 #include "ImgProcess.h"
 #include <limits>
 #include <iostream>
-
+#include <algorithm>
 
 /* build face base using eigen faces.
 * --------------------------------------
@@ -116,4 +116,183 @@ int evaluate_eigen_face_number(const Mat & train_imgs, const Mat & eigenvectors,
 	}
 	cout << "the success count is: " << success_count << endl;
 	return success_count;
+}
+
+/* calculate the unpossibility of the test_img to be a face.
+* ----------------------------------------------------------
+* @test_img: images in stand size[R*C].
+* @face_base: [M*N] matrix. M is the number of the train image.
+				N is the number of dimension of the feature.
+* @eigen_faces: [N*S] matrix. N is the number of eigen faces used.
+				S=R*C is the number of the pixels per standard image.
+* @face_base_mean: [1*N] matrix.
+* @face_base_bias_variance: the variance of the bias to the center of face base.
+* @average face:
+*-------------------------------------------------------------------------
+* return: the error of the image to be a face.
+*/
+double is_face(Mat &test_img, Mat & face_base, Mat &eigen_faces, Mat &face_base_mean,\
+				double face_base_bias_variance, const Mat &average_face, const Size std_size) {
+	Mat feature_id;
+	Mat test_im_array = test_img.reshape(0, 1);
+	test_im_array -= average_face;
+	project_to_eigen_face(eigen_faces, test_im_array, feature_id);
+	Mat img_rebuild;
+	back_project_img(feature_id, img_rebuild, eigen_faces, average_face, std_size);
+	double mse = calc_mse(test_img, img_rebuild);
+	double dist_to_face_mean = calc_bias_to_center(feature_id, face_base_mean);
+	return mse*dist_to_face_mean / face_base_bias_variance;
+}
+
+double calc_bias_to_center(Mat & face_base_mean, Mat & feature_id) {
+	return norm(face_base_mean, feature_id, NORM_L2);
+}
+
+double calc_mse(Mat &test_img, Mat &img_rebuild) {
+	return sum(abs(test_img - img_rebuild))[0]/(test_img.rows * test_img.cols);
+}
+
+/*	back project the feature id to image. rebuild the "face" image from the vie of face space.
+* --------------------------------------------------------------------------------------------
+* @feature_id: [1*N] matrix. N is the number of dimension of the feature.
+* @img_rebuild: [1*S] matrix. S=R*C is the number of the pixels per standard image.
+* @eigen_faces: [N*S] matrix. N is the number of eigen faces used.
+				S=R*C is the number of the pixels per standard image.
+* @average_face:[1*S] matrix.
+* --------------------------------------------------------------------------------------------
+*/
+bool back_project_img(Mat & feature_id, Mat & img_rebuild, Mat & eigen_faces,
+						const Mat & average_face, const Size std_size) {
+	img_rebuild = average_face + feature_id * eigen_faces;
+	img_rebuild = img_rebuild.reshape(1, std_size.height);
+	return true;
+}
+/* get the mean of the face base and its variance.
+* ------------------------------------------------
+* @face_base: [M*N] matrix. M is the number of the train image.
+				N is the number of dimension of the feature.
+* @mean_face_base: [1*N] matrix. It is the mean of the face base.
+* -------------------------------------------------
+* return: the variance.
+*/
+double analize_face_base(Mat &face_base, Mat &mean_face_base) {
+	//double denom = 1.0/ (double)(face_base.rows);
+	//Mat denom_array(1, face_base.cols, face_base.type(), Scalar(denom));
+	//mean_face_base = 
+	//mean_face_base = denom_array*face_base;
+	reduce(face_base, mean_face_base, 0, REDUCE_AVG);
+	int i = 0;
+	double variance = 0;
+	for (i = 0; i < face_base.rows; ++i){
+		variance += norm(face_base.row(i) - mean_face_base, NORM_L2);
+	}
+	variance /= face_base.rows;
+	return variance;
+}
+
+/*find same faces from the test image.
+* --------------------------------------
+* @test_image: image to be found faces.
+* @min_scale: the minimum scale factor the original image be resized to.
+* @max_scale: the maximum scale factor the original image be resized to.
+* @scale_step: the step of the iteration of the scale factor.
+* @eigen_faces: [N*S] matrix. N is the number of eigen faces used.
+				S=R*C is the number of the pixels per standard image.
+* @std_im_size: standard size of the face image.
+* @face_base: [M*N] matrix. M is the number of the train image.
+				N is the number of dimension of the feature.
+* @number_faces: number of the faces hidden in the test image.
+* @result_save_path: the path to save the result.
+* @average_face: [1*S] matrix. S=R*C is the number of the pixels per standard image.
+* ----------------------------------------------------------------------------------
+*/
+bool findFace(Mat& test_image, double min_scale, double max_scale, \
+				double scale_step, Mat &eigen_faces, Size std_im_size, \
+				Mat &face_base, int number_faces, string result_save_path, Mat & average_face) {
+	list<face_location> face_found(8);
+	double error_thres = std::numeric_limits<double>::infinity();
+	double tmp_error;
+	face_location new_face_location;
+	Rect img_block;
+	int x = 0;
+	int y = 0;
+	Mat img_part;
+	Mat img_ROI;
+	Mat error_mat = Mat::zeros(test_image.size(), test_image.type());
+	// get the mean and variance of the face base.
+	Mat mean_face_base;
+	double variance = analize_face_base(face_base, mean_face_base);
+	for (x = 0; x + std_im_size.width < test_image.cols; ++x){
+		for (y = 0; y + std_im_size.height < test_image.rows; ++y) {
+			img_block.x = x;
+			img_block.y = y;
+			img_block.width = std_im_size.width;
+			img_block.height = std_im_size.height;
+			img_ROI = test_image(img_block);
+			img_ROI.copyTo(img_part);
+			tmp_error = is_face(img_part, face_base, eigen_faces, mean_face_base, variance, average_face, std_im_size);
+			error_mat.at<double>(y, x) = tmp_error;
+			if (tmp_error < error_thres){
+				new_face_location.face_rect.x = x;
+				new_face_location.face_rect.y = y;
+				new_face_location.face_rect.width = std_im_size.width;
+				new_face_location.face_rect.height = std_im_size.height;
+				new_face_location.error = tmp_error;
+				error_thres = update_face_location(new_face_location,face_found);
+			}
+		}
+	}
+	draw_rect_to_face(test_image, face_found);
+	imwrite(result_save_path, test_image);
+	imwrite("./error_image.jpg", error_mat);
+	return true;
+}
+
+double update_face_location(face_location & new_face_location, list<face_location>& face_found) {
+	if (check_overlap(face_found, new_face_location)) {
+		// redundant face.
+		return face_found.back().error;
+	}
+	auto it = face_found.begin();
+	for (; it != face_found.end(); ++it){
+		if (it->error > new_face_location.error) {
+			face_found.insert(it, new_face_location);
+			break;
+		}
+	}
+	face_found.pop_back();
+	// return the error of the last element. It is the maximum error in current "faces".
+	return face_found.back().error;
+}
+
+bool check_overlap(list<face_location>& face_found, face_location & new_face_location) {
+	auto it = face_found.begin();
+	int old_lenth = face_found.size();
+	while (it != face_found.end()) {
+		if ((it->face_rect &new_face_location.face_rect).area() != 0){
+			if (it->error > new_face_location.error) {
+				it = face_found.erase(it);
+				continue;
+			}
+			else{
+				// the new face is redundant.
+				return true;
+			}
+		}
+		++it;
+	}
+	int i = 0;
+	int new_lenth = face_found.size();
+	for (; i < (old_lenth - new_lenth); ++i) {
+		face_found.push_back(face_location());
+	}
+	return false;
+}
+
+bool draw_rect_to_face(Mat &test_im, list<face_location>& face_found){
+	auto it = face_found.cbegin();
+	for (; it != face_found.cend(); ++it) {
+		rectangle(test_im, it->face_rect, Scalar(255, 0, 0));
+	}
+	return true;
 }

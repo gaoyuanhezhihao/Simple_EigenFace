@@ -8,16 +8,22 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include "main_func.h"
 using namespace std;
 using namespace cv;
 
 
 
 int main(int argc, char ** argv) {
+	if (argc < 3 || !(strcmp("-h", argv[2]))) {
+		print_help();
+		exit(-1);
+	}
 	vector<Mat> train_im_vec, test_im_vec;
 	map<string, universal_type> config_map;
 	Size std_im_size;
 	read_config_file(argv[1], config_map);
+	char work_type =argv[2][1];
 	int image_count = 0;
 	int test_image_count = 0;
 	image_count << config_map["image count"];
@@ -65,16 +71,17 @@ int main(int argc, char ** argv) {
 	imwrite("pc2.jpg", norm_0_255(pca.eigenvectors.row(1)).reshape(1, std_im_size.height));
 	imwrite("pc3.jpg", norm_0_255(pca.eigenvectors.row(2)).reshape(1, std_im_size.height));
 
-	std::ofstream model_eval_result;
-	model_eval_result.open(result_save_filename);
-	model_eval_result << "number of eigen face | success rate" << endl;
-	int success_count = 0;
-	for (i = 1; i <= image_count; ++i) {
-		success_count=evaluate_eigen_face_number(train_imgs, eigenvectors, test_image_dir, test_image_count, std_im_size, average_face, i);
-		model_eval_result << i << '|' << (double)success_count / (double)image_count << endl;
+
+	switch (work_type)
+	{
+	case 'r':
+		recognize_test(train_imgs, eigenvectors, test_image_dir, test_image_count, std_im_size, average_face, result_save_filename, image_count);
+		break;
+	case 'f':
+		find_face_test(config_map,eigenvectors,average_face,std_im_size,train_imgs);
+	default:
+		break;
 	}
-	char wait;
-	cin >> wait;
 	////debug
 	//im = imread(train_image_dir + '\\' + to_string(11) + ".jpg", IMREAD_GRAYSCALE);
 	//imwrite("original image.jpg", im);

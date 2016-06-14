@@ -75,6 +75,7 @@
     <ClInclude Include="Config.h" />
     <ClInclude Include="face.h" />
     <ClInclude Include="ImgProcess.h" />
+    <ClInclude Include="main_func.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
